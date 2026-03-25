@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 
 const STORAGE_KEY = 'card_vault_enc'
 const SALT_KEY    = 'card_vault_salt'
@@ -42,371 +42,457 @@ function getSalt() {
 
 const isFirstTime = () => !localStorage.getItem(VERIFY_KEY)
 
-// ── CSS ───────────────────────────────────────────────────
+// ── Liquid Glass CSS Styles ───────────────────────────────────────────
 const css = `
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+:root {
+  --text-main: #ffffff;
+  --text-muted: rgba(255, 255, 255, 0.6);
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-highlight: rgba(255, 255, 255, 0.2);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  --blur: blur(16px);
+  --accent: #fff;
+  --danger: #ff4757;
+  --success: #2ed573;
+}
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Space Grotesk', sans-serif;
-  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 40%, #16213e 70%, #0f3460 100%);
-  background-attachment: fixed;
+  font-family: 'Inter', sans-serif;
+  background-color: #050505;
   min-height: 100vh;
-  color: #111;
+  color: var(--text-main);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
-#root { position: relative; }
+#root { position: relative; min-height: 100vh; }
 
-/* ── Lock screen ── */
+/* ── Liquid Background Blobs ── */
+.liquid-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #0a0a1a;
+}
+
+.blob {
+  position: absolute;
+  filter: blur(80px);
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: floatBlobs 20s infinite alternate cubic-bezier(0.45, 0.05, 0.55, 0.95);
+}
+
+.blob-1 {
+  top: -10%; left: -10%;
+  width: 50vw; height: 50vw;
+  background: #4facfe;
+  animation-delay: 0s;
+}
+
+.blob-2 {
+  bottom: -20%; right: -10%;
+  width: 60vw; height: 60vw;
+  background: #f093fb;
+  animation-delay: -5s;
+}
+
+.blob-3 {
+  top: 40%; left: 60%;
+  width: 40vw; height: 40vw;
+  background: #43e97b;
+  animation-delay: -10s;
+}
+
+@keyframes floatBlobs {
+  0% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  33% { transform: translate(5vw, 10vh) scale(1.1) rotate(90deg); }
+  66% { transform: translate(-10vw, 5vh) scale(0.9) rotate(180deg); }
+  100% { transform: translate(0, 0) scale(1) rotate(360deg); }
+}
+
+/* Base Glass Class applied to panels */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-border);
+  border-top: 1px solid var(--glass-highlight);
+  border-left: 1px solid var(--glass-highlight);
+  box-shadow: var(--glass-shadow);
+  border-radius: 24px;
+}
+
+/* ── Lock Screen ── */
 .lock-screen {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: 24px;
+  position: relative;
+  z-index: 1;
 }
 
 .lock-box {
-  background: #fff;
-  border-radius: 24px;
-  padding: 36px 32px;
+  padding: 48px 40px;
   width: 100%;
-  max-width: 360px;
-  box-shadow: 0 24px 80px rgba(0,0,0,0.4);
-  animation: slideUp 0.3s cubic-bezier(.34,1.4,.64,1);
+  max-width: 420px;
+  animation: fadeInScale 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.lock-icon {
-  font-size: 2.4rem;
-  margin-bottom: 16px;
-  text-align: center;
+@keyframes fadeInScale {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+.lock-icon-wrapper {
+  width: 64px; height: 64px;
+  margin: 0 auto 24px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--glass-highlight);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 4px 10px rgba(255,255,255,0.1);
+}
+
+.lock-icon { font-size: 1.8rem; }
 
 .lock-title {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #111;
-  letter-spacing: -0.5px;
-  margin-bottom: 6px;
+  font-size: 1.6rem;
+  font-weight: 600;
   text-align: center;
+  margin-bottom: 8px;
 }
 
 .lock-sub {
-  font-size: 0.8rem;
-  color: #888;
+  font-size: 0.9rem;
+  color: var(--text-muted);
   text-align: center;
-  margin-bottom: 24px;
-  line-height: 1.5;
+  margin-bottom: 32px;
 }
 
 .lock-input {
   width: 100%;
-  padding: 13px 16px;
-  background: #f5f5f5;
-  border: 1.5px solid #e8e8e8;
-  border-radius: 12px;
-  color: #111;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  color: #fff;
   font-size: 1rem;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: inherit;
   outline: none;
-  transition: all 0.15s ease;
-  margin-bottom: 12px;
-  letter-spacing: 2px;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
 }
 
-.lock-input:focus { border-color: #111; background: #fff; }
-.lock-input.error { border-color: #ff4444; background: #fff5f5; }
+.lock-input:focus {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255,255,255,0.4);
+  box-shadow: 0 0 15px rgba(255,255,255,0.1), inset 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.lock-input.error { border-color: var(--danger); }
 
 .lock-error {
-  font-size: 0.78rem;
-  color: #ff4444;
+  font-size: 0.85rem;
+  color: var(--danger);
   text-align: center;
-  margin-bottom: 12px;
-  font-weight: 500;
+  margin-bottom: 16px;
 }
 
 .lock-btn {
   width: 100%;
-  padding: 14px;
-  border-radius: 12px;
+  padding: 15px;
+  border-radius: 14px;
   border: none;
-  background: #111;
-  color: #fff;
-  font-weight: 700;
-  font-size: 0.95rem;
+  background: rgba(255, 255, 255, 0.9);
+  color: #000;
+  font-weight: 600;
+  font-size: 1rem;
   cursor: pointer;
-  font-family: 'Space Grotesk', sans-serif;
-  transition: all 0.15s ease;
+  transition: all 0.3s;
+  box-shadow: 0 4px 15px rgba(255,255,255,0.2);
 }
 
-.lock-btn:hover { background: #333; }
-.lock-btn:disabled { background: #ccc; cursor: not-allowed; }
+.lock-btn:hover { background: #fff; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255,255,255,0.3); }
 
-/* ── App ── */
+/* ── App Layout ── */
 .app {
-  max-width: 560px;
+  max-width: 680px;
   margin: 0 auto;
-  padding: 32px 20px 100px;
-  /* leave room for alpha bar on right */
-  padding-right: 48px;
+  padding: 56px 24px 140px;
+  position: relative;
+  z-index: 1;
 }
 
 .app-header {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
-  margin-bottom: 28px;
+  margin-bottom: 40px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .app-title {
-  font-size: 2.6rem;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -1.5px;
-  color: #fff;
+  font-size: 2.2rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 
-.app-subtitle {
-  font-size: 0.78rem;
-  color: rgba(255,255,255,0.4);
-  margin-top: 6px;
+.app-subtitle { color: var(--text-muted); font-size: 0.95rem; }
+
+.header-actions { display: flex; gap: 12px; }
+
+.btn-add, .btn-settings {
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-highlight);
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  color: #fff;
   font-weight: 500;
-}
-
-.header-actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
-
-.btn-add {
-  width: 48px; height: 48px;
-  border-radius: 50%;
-  border: 2px solid #111;
-  background: #111;
-  color: #fff;
-  font-size: 1.5rem;
   cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
-}
-.btn-add:hover { background: #333; transform: rotate(90deg); }
-
-.btn-settings {
-  width: 42px; height: 42px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,0.2);
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.7);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
-  position: relative;
-}
-.btn-settings:hover { background: rgba(255,80,80,0.15); border-color: rgba(255,80,80,0.5); color: #ff6060; }
-
-.settings-menu {
-  position: absolute;
-  top: calc(100% + 8px); right: 0;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-  overflow: hidden;
-  min-width: 180px;
-  z-index: 100;
-  animation: fadeIn 0.12s ease;
-}
-
-.settings-item {
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px;
-  font-size: 0.85rem; font-weight: 600;
-  color: #ff4444; cursor: pointer;
-  transition: background 0.12s ease;
-  border: none; background: none; width: 100%;
-  font-family: 'Space Grotesk', sans-serif;
-}
-.settings-item:hover { background: #fff5f5; }
-
-/* ── Cards ── */
-.cards-list { display: flex; flex-direction: column; gap: 14px; }
-
-/* group letter header */
-.alpha-group-label {
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.35);
-  padding: 6px 2px 2px;
-  margin-top: 6px;
-}
-
-/* ── Alpha sidebar ── */
-.alpha-bar {
-  position: fixed;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  z-index: 50;
-  user-select: none;
-}
-
-.alpha-bar-letter {
-  width: 22px;
-  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.6rem;
-  font-weight: 700;
-  color: rgba(255,255,255,0.35);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.12s ease;
-  letter-spacing: 0;
+  transition: all 0.3s ease;
 }
 
-.alpha-bar-letter:hover,
-.alpha-bar-letter.active {
-  background: rgba(255,255,255,0.15);
+.btn-add { padding: 0 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+.btn-add:hover { background: rgba(255, 255, 255, 0.2); transform: translateY(-2px); }
+
+.btn-settings { width: 44px; }
+.btn-settings:hover { background: rgba(255, 255, 255, 0.2); }
+
+.settings-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  z-index: 100;
+  padding: 8px;
+  animation: fadeInScale 0.2s ease;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  font-size: 0.9rem;
   color: #fff;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  width: 100%;
+  border-radius: 8px;
+  transition: background 0.2s;
 }
 
-.alpha-bar-letter.has-cards {
-  color: rgba(255,255,255,0.7);
+.settings-item:hover { background: rgba(255, 255, 255, 0.1); }
+.settings-item.danger { color: var(--danger); }
+.settings-item.danger:hover { background: rgba(255, 71, 87, 0.15); }
+
+/* ── Cards List ── */
+.cards-list { display: flex; flex-direction: column; gap: 0; }
+.card-group-separator { margin-bottom: 24px !important; }
+
+.alpha-group-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 8px 0;
+  margin-top: 16px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 12px;
+}
+.alpha-group-label::after {
+  content: ''; flex: 1; height: 1px; background: var(--glass-border);
 }
 
-.empty { text-align: center; padding: 80px 20px; color: rgba(255,255,255,0.25); }
-.empty-icon { font-size: 3rem; margin-bottom: 12px; }
-.empty p { font-size: 0.88rem; }
-
+/* ── Liquid Glass Card ── */
 .card {
   border-radius: 20px;
-  padding: 24px 22px 20px;
+  padding: 24px;
   position: relative;
   overflow: hidden;
-  animation: slideIn 0.28s cubic-bezier(.34,1.4,.64,1);
-  transition: transform 0.2s ease;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--glass-shadow);
+  /* The base glass effect */
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-top: 1px solid rgba(255,255,255,0.3);
+  border-left: 1px solid rgba(255,255,255,0.2);
 }
-.card:hover { transform: translateY(-3px); }
 
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(16px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
+/* Subtle tint layer defined by inline styles */
+.card-tint {
+  position: absolute;
+  inset: 0;
+  opacity: 0.15;
+  mix-blend-mode: overlay;
+  pointer-events: none;
 }
 
-.card-top {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  margin-bottom: 28px;
+/* Diagonal glass shine */
+.card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -150%;
+  width: 50%; height: 100%;
+  background: linear-gradient(to right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
+  transform: skewX(-25deg);
+  transition: 0.5s;
 }
+
+.card:hover {
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+  border-top: 1px solid rgba(255,255,255,0.4);
+}
+.card:hover::after { left: 150%; transition: 0.7s ease-in-out; }
+
+.card-top { display: flex; justify-content: space-between; margin-bottom: 32px; position: relative; z-index: 2; }
 
 .card-chip {
-  width: 38px; height: 28px; border-radius: 5px;
-  background: rgba(0,0,0,0.18);
-  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 34px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.4), rgba(255,255,255,0.1));
+  border: 1px solid rgba(255,255,255,0.3);
+  position: relative;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+  overflow: hidden;
 }
-.chip-inner { width: 24px; height: 18px; border: 1.5px solid rgba(0,0,0,0.25); border-radius: 3px; }
+/* Frosting the chip lines */
+.card-chip::after {
+  content: ''; position: absolute; inset: 2px;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+}
 
-.card-top-right { text-align: right; }
-.card-label { font-size: 0.58rem; color: rgba(0,0,0,0.35); text-transform: uppercase; letter-spacing: 2.5px; font-weight: 600; }
-.card-name  { font-size: 0.95rem; color: rgba(0,0,0,0.85); font-weight: 700; margin-top: 3px; }
+.card-name { font-size: 1rem; font-weight: 500; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
 
-.card-number { display: flex; align-items: baseline; gap: 8px; margin-bottom: 28px; }
-.card-dots   { font-size: 0.9rem; letter-spacing: 5px; color: rgba(0,0,0,0.3); }
-.card-last4  { font-size: 2rem; font-weight: 800; letter-spacing: -1px; color: #111; line-height: 1; }
-.card-full-number { font-size: 1.35rem; font-weight: 800; letter-spacing: 2px; color: #111; line-height: 1; }
+.card-number {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 28px; position: relative; z-index: 2;
+}
 
-.card-bottom { display: flex; align-items: flex-end; justify-content: space-between; }
-.card-meta   { display: flex; gap: 20px; }
-.card-field  { display: flex; flex-direction: column; gap: 2px; }
+.card-dots { font-size: 0.85rem; letter-spacing: 5px; color: var(--text-muted); }
+.card-last4, .card-full-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.4rem; font-weight: 500;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
 
-.field-label { font-size: 0.52rem; color: rgba(0,0,0,0.35); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
-.field-value { font-size: 0.82rem; color: rgba(0,0,0,0.75); font-weight: 600; letter-spacing: 1px; }
-.field-value-revealed { font-size: 0.82rem; color: #111; font-weight: 700; letter-spacing: 2px; }
+.card-bottom { display: flex; align-items: flex-end; justify-content: space-between; position: relative; z-index: 2; }
+.card-meta { display: flex; gap: 32px; }
+.card-field { display: flex; flex-direction: column; gap: 4px; }
+.field-label { font-size: 0.65rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+.field-value, .field-value-revealed { font-family: 'JetBrains Mono', monospace; font-size: 0.95rem; }
 
-.card-actions { display: flex; gap: 6px; }
+.card-actions { 
+  display: flex; gap: 8px; 
+  opacity: 0; transform: translateX(10px); transition: all 0.3s ease;
+}
+.card:hover .card-actions { opacity: 1; transform: translateX(0); }
 
 .btn-icon {
-  width: 32px; height: 32px; border-radius: 50%;
-  border: 1.5px solid rgba(0,0,0,0.2);
-  background: rgba(0,0,0,0.06);
-  color: rgba(0,0,0,0.5);
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.8rem;
-  transition: all 0.15s ease;
+  transition: all 0.2s;
+  backdrop-filter: blur(5px);
 }
-.btn-icon:hover { background: rgba(0,0,0,0.12); color: #111; border-color: rgba(0,0,0,0.4); transform: scale(1.08); }
-.btn-icon.btn-copy.copied { background: #111; color: #fff; border-color: #111; }
-.btn-icon.btn-eye.active  { background: #111; color: #fff; border-color: #111; }
-.btn-icon.btn-delete:hover { background: #ff4444; color: #fff; border-color: #ff4444; }
+.btn-icon:hover { background: rgba(255, 255, 255, 0.25); transform: scale(1.05); }
 
 /* ── Modal ── */
 .overlay {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.4);
+  background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
-  z-index: 1000; padding: 20px;
-  animation: fadeIn 0.15s ease;
+  z-index: 1000; padding: 24px;
+  animation: fadeIn 0.3s ease;
 }
 
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .modal {
-  background: #fff; border-radius: 20px; padding: 28px;
-  width: 100%; max-width: 400px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-  animation: slideUp 0.22s cubic-bezier(.34,1.4,.64,1);
+  padding: 32px;
+  width: 100%; max-width: 440px;
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(24px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
+.modal-title { font-size: 1.4rem; font-weight: 600; margin-bottom: 24px; }
 
-.modal-title { font-size: 1.4rem; font-weight: 800; margin-bottom: 22px; color: #111; letter-spacing: -0.5px; }
-
-.field-group { margin-bottom: 14px; }
-.field-group .field-label {
-  display: block; font-size: 0.65rem; color: #888;
-  text-transform: uppercase; letter-spacing: 1.3px; margin-bottom: 7px; font-weight: 600;
-}
+.field-group { margin-bottom: 20px; }
+.field-group .field-label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 8px; }
 
 .field-input {
-  width: 100%; padding: 11px 14px;
-  background: #f5f5f5; border: 1.5px solid #e8e8e8; border-radius: 10px;
-  color: #111; font-size: 0.93rem; font-family: 'Space Grotesk', sans-serif;
-  outline: none; transition: all 0.15s ease; font-weight: 500;
+  width: 100%; padding: 14px 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  color: #fff; font-size: 1rem;
+  font-family: inherit; outline: none; transition: all 0.2s;
 }
-.field-input:focus { border-color: #111; background: #fff; }
-.field-input::placeholder { color: #bbb; }
-
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.modal-actions { display: flex; gap: 10px; margin-top: 22px; }
-
-.btn-primary {
-  flex: 1; padding: 13px; border-radius: 10px; border: none;
-  background: #111; color: #fff; font-weight: 700; font-size: 0.9rem;
-  cursor: pointer; font-family: 'Space Grotesk', sans-serif; transition: all 0.15s ease;
+.field-input:focus {
+  background: rgba(0, 0, 0, 0.3); border-color: rgba(255,255,255,0.4);
+  box-shadow: 0 0 10px rgba(255,255,255,0.1);
 }
-.btn-primary:hover { background: #333; }
+
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; }
 
 .btn-secondary {
-  flex: 1; padding: 13px; border-radius: 10px;
-  border: 1.5px solid #e0e0e0; background: #fff; color: #666;
-  font-weight: 600; font-size: 0.9rem; cursor: pointer;
-  font-family: 'Space Grotesk', sans-serif; transition: all 0.15s ease;
+  padding: 12px 24px; border-radius: 12px;
+  background: rgba(255,255,255,0.1); border: 1px solid var(--glass-border);
+  color: #fff; cursor: pointer; transition: 0.2s;
 }
-.btn-secondary:hover { border-color: #bbb; color: #333; }
+.btn-secondary:hover { background: rgba(255,255,255,0.2); }
 
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+.btn-primary {
+  padding: 12px 24px; border-radius: 12px;
+  background: #fff; border: none; color: #000;
+  font-weight: 600; cursor: pointer; transition: 0.2s;
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(255,255,255,0.3); }
+
+/* ── Empty State ── */
+.empty {
+  text-align: center; padding: 80px 24px;
+  border-radius: 20px; border: 1px dashed var(--glass-highlight);
+  background: rgba(255,255,255,0.02);
+}
+
+/* ── Toast ── */
+.toast-container { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column; gap: 12px; }
+.toast {
+  padding: 14px 20px; display: flex; align-items: center; gap: 12px;
+  animation: toastSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes toastSlideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 768px) {
+  .card-actions { opacity: 1; transform: none; }
+}
 `
 
 // ── Helpers ───────────────────────────────────────────────
@@ -420,23 +506,30 @@ function CopyBtn({ number, dashes }) {
     const d = number.replace(/\s/g, '')
     const text = dashes ? d.replace(/(.{4})/g, '$1-').replace(/-$/, '') : d
     navigator.clipboard.writeText(text).then(() => {
-      setCopied(true); setTimeout(() => setCopied(false), 1400)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
     })
   }
   return (
-    <button className={`btn-icon btn-copy${copied ? ' copied' : ''}`}
-      title={dashes ? 'Copy with dashes' : 'Copy plain'} onClick={copy}>
-      {copied ? '✓' : dashes
-        ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="2" width="13" height="13" rx="2"/><line x1="3" y1="22" x2="16" y2="22"/></svg>
-        : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    <button className="btn-icon" title={dashes ? 'Copy with dashes' : 'Copy plain'} onClick={copy}>
+      {copied
+        ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2ed573" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+        : dashes
+          ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="2" width="13" height="13" rx="2"/><line x1="3" y1="22" x2="16" y2="22"/></svg>
+          : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       }
     </button>
   )
 }
 
+// Glass tints that overlay the frosted card
 const CARD_THEMES = [
-  { bg: '#c8f0a0' }, { bg: '#f5c842' }, { bg: '#f08080' },
-  { bg: '#b8a0f0' }, { bg: '#80d4f0' }, { bg: '#f0b880' },
+  { color: '#5b6cf9' }, // Neon Blue
+  { color: '#f093fb' }, // Pink
+  { color: '#43e97b' }, // Green
+  { color: '#fa709a' }, // Rose
+  { color: '#00f2fe' }, // Cyan
+  { color: '#f6d365' }, // Gold
 ]
 
 // ── Card component ────────────────────────────────────────
@@ -447,11 +540,11 @@ function Card({ card, index, onEdit, onDelete }) {
   const fullNumber = card.number.replace(/\s/g, '').replace(/(.{4})/g, '$1 ').trim()
 
   return (
-    <div className="card" style={{ background: t.bg }}>
+    <div className="card">
+      <div className="card-tint" style={{ background: `linear-gradient(135deg, ${t.color}, transparent)` }} />
       <div className="card-top">
-        <div className="card-chip"><div className="chip-inner" /></div>
+        <div className="card-chip"></div>
         <div className="card-top-right">
-          {/* <div className="card-label">Credit Card</div> */}
           {card.name && <div className="card-name">{card.name}</div>}
         </div>
       </div>
@@ -464,7 +557,7 @@ function Card({ card, index, onEdit, onDelete }) {
       <div className="card-bottom">
         <div className="card-meta">
           <div className="card-field">
-            <span className="field-label">Expiry</span>
+            <span className="field-label">Expires</span>
             <span className="field-value">{card.expiry || '––/––'}</span>
           </div>
           <div className="card-field">
@@ -476,17 +569,20 @@ function Card({ card, index, onEdit, onDelete }) {
           </div>
         </div>
         <div className="card-actions">
-          <button className={`btn-icon btn-eye${revealed ? ' active' : ''}`}
-            title={revealed ? 'Hide' : 'Show'} onClick={() => setRevealed(r => !r)}>
+          <button className="btn-icon" title={revealed ? 'Hide' : 'Show'} onClick={() => setRevealed(r => !r)}>
             {revealed
-              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-              : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             }
           </button>
           <CopyBtn number={card.number} dashes={false} />
           <CopyBtn number={card.number} dashes={true} />
-          <button className="btn-icon btn-edit" onClick={() => onEdit(card)} title="Edit">✎</button>
-          <button className="btn-icon btn-delete" onClick={() => onDelete(card.id)} title="Delete">✕</button>
+          <button className="btn-icon" onClick={() => onEdit(card)} title="Edit">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button className="btn-icon" onClick={() => onDelete(card.id)} title="Delete">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff4757" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          </button>
         </div>
       </div>
     </div>
@@ -496,6 +592,7 @@ function Card({ card, index, onEdit, onDelete }) {
 // ── Add/Edit Modal ────────────────────────────────────────
 function Modal({ initial, onSave, onClose }) {
   const [form, setForm] = useState(initial || { name: '', number: '', expiry: '', cvv: '' })
+  const [errors, setErrors] = useState({})
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   function handleNumber(e) { set('number', formatCardNumber(e.target.value)) }
@@ -506,38 +603,45 @@ function Modal({ initial, onSave, onClose }) {
   }
   function handleCvv(e) { set('cvv', e.target.value.replace(/\D/g, '').slice(0, 4)) }
 
-  function submit(e) {
-    e.preventDefault()
-    if (!form.number.replace(/\s/g, '')) return
-    onSave(form)
+  function validate() {
+    const newErrors = {}
+    if (!form.name.trim()) newErrors.name = 'Name is required'
+    if (!form.number.replace(/\s/g, '').length) newErrors.number = 'Card number is required'
+    if (form.number.replace(/\s/g, '').length > 0 && form.number.replace(/\s/g, '').length < 13) newErrors.number = 'Invalid card number'
+    if (form.expiry && !/^\d{2}\/\d{2}$/.test(form.expiry)) newErrors.expiry = 'Invalid format'
+    if (form.cvv && form.cvv.length < 3) newErrors.cvv = 'Invalid CVV'
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
   }
+
+  function submit(e) { e.preventDefault(); if (validate()) onSave(form) }
 
   return (
     <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal">
-        <div className="modal-title">{initial ? 'Edit Card' : 'Add Card'}</div>
+      <div className="modal glass-panel">
+        <div className="modal-title">{initial ? 'Edit Details' : 'Add New Card'}</div>
         <form onSubmit={submit}>
           <div className="field-group">
             <label className="field-label">Cardholder Name</label>
-            <input className="field-input" placeholder="J. DOE" value={form.name} onChange={e => set('name', e.target.value)} />
+            <input className={`field-input${errors.name ? ' error' : ''}`} placeholder="e.g. JANE DOE" value={form.name} onChange={e => { set('name', e.target.value); setErrors(e => ({ ...e, name: '' })) }} />
           </div>
           <div className="field-group">
-            <label className="field-label">Card Number *</label>
-            <input className="field-input" placeholder="0000 0000 0000 0000" value={form.number} onChange={handleNumber} required />
+            <label className="field-label">Card Number</label>
+            <input className={`field-input${errors.number ? ' error' : ''}`} placeholder="0000 0000 0000 0000" value={form.number} onChange={handleNumber} required />
           </div>
           <div className="field-row">
             <div className="field-group">
-              <label className="field-label">Expiry</label>
-              <input className="field-input" placeholder="MM/YY" value={form.expiry} onChange={handleExpiry} />
+              <label className="field-label">Expiration</label>
+              <input className={`field-input${errors.expiry ? ' error' : ''}`} placeholder="MM/YY" value={form.expiry} onChange={handleExpiry} />
             </div>
             <div className="field-group">
               <label className="field-label">CVV</label>
-              <input className="field-input" placeholder="•••" value={form.cvv} onChange={handleCvv} type="password" />
+              <input className={`field-input${errors.cvv ? ' error' : ''}`} placeholder="123" value={form.cvv} onChange={handleCvv} type="password" />
             </div>
           </div>
           <div className="modal-actions">
             <button type="button" className="btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn-primary">Save</button>
+            <button type="submit" className="btn-primary">Save Card</button>
           </div>
         </form>
       </div>
@@ -545,25 +649,30 @@ function Modal({ initial, onSave, onClose }) {
   )
 }
 
+// ── Toast Component ───────────────────────────────────────
+function Toast({ message, type = 'info', onClose }) {
+  useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
+  return (
+    <div className="toast glass-panel">
+      <span style={{ fontSize: '1.2rem' }}>{type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}</span>
+      <span style={{ flex: 1, fontSize: '0.9rem', fontWeight: 500 }}>{message}</span>
+    </div>
+  )
+}
+
 // ── Lock Screen ───────────────────────────────────────────
 function LockScreen({ onUnlock }) {
   const firstTime = isFirstTime()
-  const [pw, setPw]         = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [error, setError]   = useState('')
-  const [loading, setLoading] = useState(false)
+  const [pw, setPw] = useState(''); const [confirm, setConfirm] = useState(''); const [error, setError] = useState(''); const [loading, setLoading] = useState(false)
 
   async function submit(e) {
-    e.preventDefault()
-    setError('')
-    if (pw.length < 4) { setError('Password must be at least 4 characters.'); return }
-    if (firstTime && pw !== confirm) { setError('Passwords do not match.'); return }
+    e.preventDefault(); setError('')
+    if (pw.length < 4) return setError('Password must be at least 4 characters.')
+    if (firstTime && pw !== confirm) return setError('Passwords do not match.')
     setLoading(true)
     try {
-      const salt = getSalt()
-      const key  = await deriveKey(pw, salt)
+      const salt = getSalt(); const key = await deriveKey(pw, salt)
       if (firstTime) {
-        // store encrypted verify token so we can detect wrong password later
         const payload = await encrypt(key, VERIFY_TEXT)
         localStorage.setItem(VERIFY_KEY, JSON.stringify(payload))
         onUnlock(key)
@@ -573,69 +682,25 @@ function LockScreen({ onUnlock }) {
         if (result !== VERIFY_TEXT) throw new Error('wrong')
         onUnlock(key)
       }
-    } catch {
-      setError('Wrong password. Try again.')
-    }
+    } catch { setError('Incorrect password. Please try again.') }
     setLoading(false)
   }
 
   return (
     <div className="lock-screen">
-      <div className="lock-box">
-        <div className="lock-icon">🔐</div>
-        <div className="lock-title">{firstTime ? 'Set Password' : 'Card Vault'}</div>
-        <div className="lock-sub">
-          {firstTime
-            ? 'Choose a master password to encrypt your cards.'
-            : 'Enter your master password to unlock.'}
+      <div className="lock-box glass-panel">
+        <div className="lock-icon-wrapper">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         </div>
+        <div className="lock-title">{firstTime ? 'Setup Vault' : 'Welcome Back'}</div>
+        <div className="lock-sub">{firstTime ? 'Create a master password.' : 'Enter password to decrypt.'}</div>
         <form onSubmit={submit}>
-          <input
-            className={`lock-input${error ? ' error' : ''}`}
-            type="password" placeholder="Master password"
-            value={pw} onChange={e => { setPw(e.target.value); setError('') }}
-            autoFocus
-          />
-          {firstTime && (
-            <input
-              className={`lock-input${error ? ' error' : ''}`}
-              type="password" placeholder="Confirm password"
-              value={confirm} onChange={e => { setConfirm(e.target.value); setError('') }}
-            />
-          )}
+          <input className={`lock-input${error ? ' error' : ''}`} type="password" placeholder="Master password" value={pw} onChange={e => { setPw(e.target.value); setError('') }} autoFocus />
+          {firstTime && <input className={`lock-input${error ? ' error' : ''}`} type="password" placeholder="Confirm password" value={confirm} onChange={e => { setConfirm(e.target.value); setError('') }} />}
           {error && <div className="lock-error">{error}</div>}
-          <button className="lock-btn" type="submit" disabled={loading}>
-            {loading ? 'Unlocking…' : firstTime ? 'Set Password & Enter' : 'Unlock'}
-          </button>
+          <button className="lock-btn" type="submit" disabled={loading}>{loading ? 'Decrypting...' : firstTime ? 'Initialize Vault' : 'Unlock Vault'}</button>
         </form>
       </div>
-    </div>
-  )
-}
-
-// ── Alpha sidebar ─────────────────────────────────────────
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('')
-
-function AlphaBar({ available, onJump }) {
-  const [active, setActive] = useState(null)
-
-  function jump(letter) {
-    setActive(letter)
-    onJump(letter)
-    setTimeout(() => setActive(null), 600)
-  }
-
-  return (
-    <div className="alpha-bar">
-      {ALPHABET.map(l => (
-        <div
-          key={l}
-          className={`alpha-bar-letter${available.has(l) ? ' has-cards' : ''}${active === l ? ' active' : ''}`}
-          onClick={() => available.has(l) && jump(l)}
-        >
-          {l}
-        </div>
-      ))}
     </div>
   )
 }
@@ -643,17 +708,27 @@ function AlphaBar({ available, onJump }) {
 // ── App ───────────────────────────────────────────────────
 export default function App() {
   const [cryptoKey, setCryptoKey] = useState(null)
-  const [cards, setCards]         = useState([])
-  const [modal, setModal]         = useState(null)
+  const [cards, setCards] = useState([])
+  const [modal, setModal] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [toasts, setToasts] = useState([])
+  const settingsRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(e) { if (settingsRef.current && !settingsRef.current.contains(e.target)) setShowSettings(false) }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const addToast = useCallback((message, type = 'info') => {
+    const id = Date.now(); setToasts(prev => [...prev, { id, message, type }])
+  }, [])
 
   useEffect(() => {
     if (!cryptoKey) return
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return
-    decrypt(cryptoKey, JSON.parse(raw))
-      .then(setCards)
-      .catch(() => setCards([]))
+    decrypt(cryptoKey, JSON.parse(raw)).then(setCards).catch(() => setCards([]))
   }, [cryptoKey])
 
   const saveCards = useCallback(async (updated) => {
@@ -663,56 +738,38 @@ export default function App() {
   }, [cryptoKey])
 
   function updateCards(fn) {
-    setCards(prev => {
-      const next = fn(prev)
-      saveCards(next)
-      return next
-    })
+    setCards(prev => { const next = fn(prev); saveCards(next); return next })
   }
 
-  function addCard(form)  { updateCards(c => [...c, { ...form, id: Date.now() }]); setModal(null) }
-  function editCard(form) { updateCards(c => c.map(x => x.id === form.id ? form : x)); setModal(null) }
-  function deleteCard(id) { updateCards(c => c.filter(x => x.id !== id)) }
+  function addCard(form) { updateCards(c => [...c, { ...form, id: Date.now() }]); setModal(null); addToast('Card saved', 'success') }
+  function editCard(form) { updateCards(c => c.map(x => x.id === form.id ? form : x)); setModal(null); addToast('Card updated', 'success') }
+  function deleteCard(id) { updateCards(c => c.filter(x => x.id !== id)); addToast('Card removed', 'error') }
 
   function clearAll() {
-    if (!confirm('Delete all cards? This cannot be undone.')) { setShowSettings(false); return }
-    localStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem(VERIFY_KEY)
-    localStorage.removeItem(SALT_KEY)
-    setCards([])
-    setCryptoKey(null)
-    setShowSettings(false)
+    if (!confirm('Permanently delete your vault? This cannot be undone.')) return setShowSettings(false)
+    localStorage.clear(); setCards([]); setCryptoKey(null); setShowSettings(false)
   }
 
-  // sort alphabetically by name, unnamed cards go to end
-  const sorted = [...cards].sort((a, b) => {
-    const na = (a.name || '').trim().toUpperCase() || '~'
-    const nb = (b.name || '').trim().toUpperCase() || '~'
-    return na.localeCompare(nb)
+  const sorted = [...cards].sort((a, b) => ((a.name || '').trim().toUpperCase() || '~').localeCompare((b.name || '').trim().toUpperCase() || '~'))
+  const groups = []; sorted.forEach((card, i) => {
+    const l = ((card.name || '').trim()[0]?.toUpperCase().match(/[A-Z]/) ? card.name.trim()[0].toUpperCase() : '#')
+    if (i === 0 || l !== groups[groups.length - 1]?.letter) groups.push({ letter: l, cards: [{ card, index: i }] })
+    else groups[groups.length - 1].cards.push({ card, index: i })
   })
 
-  // group by first letter
-  const groups = []
-  const available = new Set()
-  sorted.forEach((card, i) => {
-    const first = (card.name || '').trim()[0]?.toUpperCase()
-    const letter = first && /[A-Z]/.test(first) ? first : '#'
-    available.add(letter)
-    if (i === 0 || letter !== groups[groups.length - 1]?.letter) {
-      groups.push({ letter, cards: [{ card, index: i }] })
-    } else {
-      groups[groups.length - 1].cards.push({ card, index: i })
-    }
-  })
-
-  function jumpTo(letter) {
-    const el = document.getElementById(`alpha-${letter}`)
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  // The liquid background component injected behind the app
+  const LiquidBackground = () => (
+    <div className="liquid-bg">
+      <div className="blob blob-1"></div>
+      <div className="blob blob-2"></div>
+      <div className="blob blob-3"></div>
+    </div>
+  )
 
   if (!cryptoKey) return (
     <>
       <style>{css}</style>
+      <LiquidBackground />
       <LockScreen onUnlock={setCryptoKey} />
     </>
   )
@@ -720,61 +777,49 @@ export default function App() {
   return (
     <>
       <style>{css}</style>
+      <LiquidBackground />
       <div className="app">
         <header className="app-header">
           <div>
-            <div className="app-title">Card Vault</div>
-            <div className="app-subtitle">{cards.length} card{cards.length !== 1 ? 's' : ''} stored locally</div>
+            <div className="app-title">Glass Vault</div>
+            <div className="app-subtitle">{cards.length} encrypted record{cards.length !== 1 ? 's' : ''}</div>
           </div>
           <div className="header-actions">
-            <div style={{ position: 'relative' }}>
-              <button className="btn-settings" title="Settings" onClick={() => setShowSettings(s => !s)}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="3"/>
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-              </button>
+            <div style={{ position: 'relative' }} ref={settingsRef}>
+              <button className="btn-settings" onClick={() => setShowSettings(s => !s)}>⚙️</button>
               {showSettings && (
-                <div className="settings-menu">
-                  <button className="settings-item" onClick={() => { setCryptoKey(null); setShowSettings(false) }}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                    Lock vault
-                  </button>
-                  <button className="settings-item" onClick={clearAll}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-                    Clear all data
-                  </button>
+                <div className="settings-menu glass-panel">
+                  <button className="settings-item" onClick={() => { setCryptoKey(null); setShowSettings(false) }}>🔒 Lock Vault</button>
+                  <button className="settings-item danger" onClick={clearAll}>🗑 Wipe Database</button>
                 </div>
               )}
             </div>
-            <button className="btn-add" onClick={() => setModal('add')}>+</button>
+            <button className="btn-add" onClick={() => setModal('add')}>+ New</button>
           </div>
         </header>
 
         <div className="cards-list">
           {cards.length === 0
-            ? <div className="empty"><div className="empty-icon">💳</div><p>No cards yet. Hit + to add one.</p></div>
-            : groups.map(({ letter, cards: group }) => (
+            ? <div className="empty glass-panel"><p style={{fontSize: '2rem'}}>🫙</p><p style={{marginTop:'10px'}}>Vault is empty</p></div>
+            : groups.map(({ letter, cards: group }, gi) => (
                 <div key={letter}>
-                  <div id={`alpha-${letter}`} className="alpha-group-label">{letter}</div>
-                  {group.map(({ card, index }) => (
-                    <Card key={card.id} card={card} index={index}
-                      onEdit={c => setModal(c)} onDelete={deleteCard} />
+                  <div className="alpha-group-label">{letter}</div>
+                  {group.map(({ card, index }, ci) => (
+                    <Fragment key={card.id}>
+                      <Card card={card} index={index} onEdit={c => setModal(c)} onDelete={deleteCard} />
+                      {ci < group.length - 1 && <div className="card-group-separator" />}
+                    </Fragment>
                   ))}
+                  {gi < groups.length - 1 && <div className="card-group-separator" />}
                 </div>
               ))
           }
         </div>
 
-        {cards.length > 0 && <AlphaBar available={available} onJump={jumpTo} />}
-
-        {modal && (
-          <Modal
-            initial={modal === 'add' ? null : modal}
-            onSave={modal === 'add' ? addCard : editCard}
-            onClose={() => setModal(null)}
-          />
-        )}
+        {modal && <Modal initial={modal === 'add' ? null : modal} onSave={modal === 'add' ? addCard : editCard} onClose={() => setModal(null)} />}
+        <div className="toast-container">
+          {toasts.map(t => <Toast key={t.id} message={t.message} type={t.type} onClose={() => setToasts(p => p.filter(x => x.id !== t.id))} />)}
+        </div>
       </div>
     </>
   )
