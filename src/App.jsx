@@ -148,6 +148,8 @@ body {
   max-width: 560px;
   margin: 0 auto;
   padding: 32px 20px 100px;
+  /* leave room for alpha bar on right */
+  padding-right: 48px;
 }
 
 .app-header {
@@ -227,6 +229,56 @@ body {
 
 /* ── Cards ── */
 .cards-list { display: flex; flex-direction: column; gap: 14px; }
+
+/* group letter header */
+.alpha-group-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+  padding: 6px 2px 2px;
+  margin-top: 6px;
+}
+
+/* ── Alpha sidebar ── */
+.alpha-bar {
+  position: fixed;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  z-index: 50;
+  user-select: none;
+}
+
+.alpha-bar-letter {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.35);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  letter-spacing: 0;
+}
+
+.alpha-bar-letter:hover,
+.alpha-bar-letter.active {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+
+.alpha-bar-letter.has-cards {
+  color: rgba(255,255,255,0.7);
+}
 
 .empty { text-align: center; padding: 80px 20px; color: rgba(255,255,255,0.25); }
 .empty-icon { font-size: 3rem; margin-bottom: 12px; }
@@ -561,14 +613,40 @@ function LockScreen({ onUnlock }) {
   )
 }
 
+// ── Alpha sidebar ─────────────────────────────────────────
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ#'.split('')
+
+function AlphaBar({ available, onJump }) {
+  const [active, setActive] = useState(null)
+
+  function jump(letter) {
+    setActive(letter)
+    onJump(letter)
+    setTimeout(() => setActive(null), 600)
+  }
+
+  return (
+    <div className="alpha-bar">
+      {ALPHABET.map(l => (
+        <div
+          key={l}
+          className={`alpha-bar-letter${available.has(l) ? ' has-cards' : ''}${active === l ? ' active' : ''}`}
+          onClick={() => available.has(l) && jump(l)}
+        >
+          {l}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── App ───────────────────────────────────────────────────
 export default function App() {
-  const [cryptoKey, setCryptoKey] = useState(null)   // null = locked
+  const [cryptoKey, setCryptoKey] = useState(null)
   const [cards, setCards]         = useState([])
   const [modal, setModal]         = useState(null)
   const [showSettings, setShowSettings] = useState(false)
 
-  // load + decrypt cards whenever key is set
   useEffect(() => {
     if (!cryptoKey) return
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -578,7 +656,6 @@ export default function App() {
       .catch(() => setCards([]))
   }, [cryptoKey])
 
-  // encrypt + save whenever cards change (only if unlocked)
   const saveCards = useCallback(async (updated) => {
     if (!cryptoKey) return
     const payload = await encrypt(cryptoKey, updated)
@@ -605,6 +682,32 @@ export default function App() {
     setCards([])
     setCryptoKey(null)
     setShowSettings(false)
+  }
+
+  // sort alphabetically by name, unnamed cards go to end
+  const sorted = [...cards].sort((a, b) => {
+    const na = (a.name || '').trim().toUpperCase() || '~'
+    const nb = (b.name || '').trim().toUpperCase() || '~'
+    return na.localeCompare(nb)
+  })
+
+  // group by first letter
+  const groups = []
+  const available = new Set()
+  sorted.forEach((card, i) => {
+    const first = (card.name || '').trim()[0]?.toUpperCase()
+    const letter = first && /[A-Z]/.test(first) ? first : '#'
+    available.add(letter)
+    if (i === 0 || letter !== groups[groups.length - 1]?.letter) {
+      groups.push({ letter, cards: [{ card, index: i }] })
+    } else {
+      groups[groups.length - 1].cards.push({ card, index: i })
+    }
+  })
+
+  function jumpTo(letter) {
+    const el = document.getElementById(`alpha-${letter}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   if (!cryptoKey) return (
@@ -651,12 +754,19 @@ export default function App() {
         <div className="cards-list">
           {cards.length === 0
             ? <div className="empty"><div className="empty-icon">💳</div><p>No cards yet. Hit + to add one.</p></div>
-            : cards.map((card, i) => (
-                <Card key={card.id} card={card} index={i}
-                  onEdit={c => setModal(c)} onDelete={deleteCard} />
+            : groups.map(({ letter, cards: group }) => (
+                <div key={letter}>
+                  <div id={`alpha-${letter}`} className="alpha-group-label">{letter}</div>
+                  {group.map(({ card, index }) => (
+                    <Card key={card.id} card={card} index={index}
+                      onEdit={c => setModal(c)} onDelete={deleteCard} />
+                  ))}
+                </div>
               ))
           }
         </div>
+
+        {cards.length > 0 && <AlphaBar available={available} onJump={jumpTo} />}
 
         {modal && (
           <Modal
