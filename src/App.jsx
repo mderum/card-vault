@@ -459,6 +459,70 @@ body {
 
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
+.field-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.btn-nfc {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(79, 172, 254, 0.2);
+  color: #4facfe;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-nfc:hover:not(:disabled) {
+  background: rgba(79, 172, 254, 0.3);
+  color: #fff;
+  transform: translateY(-50%) scale(1.02);
+}
+
+.btn-nfc:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-nfc.scanning {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.nfc-status {
+  font-size: 0.8rem;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nfc-status.success { color: var(--success); }
+.nfc-status.error { color: var(--danger); }
+.nfc-status.info { color: #4facfe; }
+
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; }
 
 .btn-secondary {
@@ -498,6 +562,96 @@ body {
 // ── Helpers ───────────────────────────────────────────────
 function formatCardNumber(raw) {
   return raw.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim()
+}
+
+// ── NFC Scanning Function ─────────────────────────────────
+async function scanWithNFC(onProgress) {
+  if (!('NDEFReader' in window)) {
+    throw new Error('NFC not supported on this device. Please use an Android phone with Chrome/Edge.')
+  }
+
+  const reader = new NDEFReader()
+  
+  return new Promise((resolve, reject) => {
+    let resolved = false
+    
+    reader.onreading = event => {
+      if (resolved) return
+      
+      try {
+        let cardNumber = null
+        
+        for (const record of event.message.records) {
+          const textDecoder = new TextDecoder(record.encoding)
+          
+          // Try to extract card number from text records
+          if (record.recordType === 'text') {
+            const text = textDecoder.decode(record.data)
+            const extracted = text.replace(/\D/g, '').slice(0, 16)
+            if (extracted.length >= 13) {
+              cardNumber = extracted
+              break
+            }
+          }
+          
+          // Try URI records
+          if (record.recordType === 'url') {
+            const url = textDecoder.decode(record.data)
+            const extracted = url.replace(/\D/g, '').slice(0, 16)
+            if (extracted.length >= 13) {
+              cardNumber = extracted
+              break
+            }
+          }
+          
+          // Try well-known text records
+          if (record.recordType === 0x54) { // 'T' for text
+            const text = textDecoder.decode(record.data)
+            const extracted = text.replace(/\D/g, '').slice(0, 16)
+            if (extracted.length >= 13) {
+              cardNumber = extracted
+              break
+            }
+          }
+        }
+        
+        if (cardNumber) {
+          resolved = true
+          resolve(formatCardNumber(cardNumber))
+        } else {
+          reject(new Error('No valid card number found on NFC tag'))
+        }
+      } catch (err) {
+        reject(new Error('Failed to parse NFC data: ' + err.message))
+      }
+    }
+    
+    reader.onreadingerror = () => {
+      if (!resolved) {
+        resolved = true
+        reject(new Error('Failed to read NFC tag. Please try again.'))
+      }
+    }
+    
+    reader.scan()
+      .then(() => {
+        if (onProgress) onProgress('Scan started. Hold your card near the back of your phone...')
+      })
+      .catch(err => {
+        if (!resolved) {
+          resolved = true
+          reject(new Error('NFC scan failed: ' + err.message))
+        }
+      })
+    
+    // Timeout after 15 seconds
+    setTimeout(() => {
+      if (!resolved) {
+        resolved = true
+        reject(new Error('NFC scan timed out. Please try again.'))
+      }
+    }, 15000)
+  })
 }
 
 function CopyBtn({ number, dashes }) {
@@ -590,9 +744,11 @@ function Card({ card, index, onEdit, onDelete }) {
 }
 
 // ── Add/Edit Modal ────────────────────────────────────────
-function Modal({ initial, onSave, onClose }) {
+function Modal({ initial, onSave, onClose, onNFCScanRequest }) {
   const [form, setForm] = useState(initial || { name: '', number: '', expiry: '', cvv: '' })
   const [errors, setErrors] = useState({})
+  const [nfcScanning, setNfcScanning] = useState(false)
+  const [nfcStatus, setNfcStatus] = useState('')
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   function handleNumber(e) { set('number', formatCardNumber(e.target.value)) }
@@ -602,6 +758,28 @@ function Modal({ initial, onSave, onClose }) {
     set('expiry', v)
   }
   function handleCvv(e) { set('cvv', e.target.value.replace(/\D/g, '').slice(0, 4)) }
+
+  async function handleNFCScan() {
+    setNfcScanning(true)
+    setNfcStatus('Starting NFC scan...')
+    
+    try {
+      const cardNumber = await scanWithNFC((status) => setNfcStatus(status))
+      set('number', cardNumber)
+      setNfcStatus('✅ Card scanned successfully!')
+      setTimeout(() => {
+        setNfcScanning(false)
+        setNfcStatus('')
+      }, 2000)
+    } catch (err) {
+      setNfcScanning(false)
+      setNfcStatus('❌ ' + err.message)
+      if (onNFCScanRequest) {
+        onNFCScanRequest(err.message)
+      }
+      setTimeout(() => setNfcStatus(''), 5000)
+    }
+  }
 
   function validate() {
     const newErrors = {}
@@ -627,7 +805,40 @@ function Modal({ initial, onSave, onClose }) {
           </div>
           <div className="field-group">
             <label className="field-label">Card Number</label>
-            <input className={`field-input${errors.number ? ' error' : ''}`} placeholder="0000 0000 0000 0000" value={form.number} onChange={handleNumber} required />
+            <div className="field-input-wrapper">
+              <input 
+                className={`field-input${errors.number ? ' error' : ''}`} 
+                placeholder="0000 0000 0000 0000" 
+                value={form.number} 
+                onChange={handleNumber} 
+                required 
+                style={{ paddingRight: nfcScanning ? '140px' : '100px' }}
+              />
+              <button 
+                type="button"
+                className={`btn-nfc${nfcScanning ? ' scanning' : ''}`} 
+                onClick={handleNFCScan}
+                disabled={nfcScanning}
+                title="Scan card using NFC"
+              >
+                {nfcScanning ? (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+                    Scanning...
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
+                    Scan NFC
+                  </>
+                )}
+              </button>
+            </div>
+            {nfcStatus && (
+              <div className={`nfc-status${nfcStatus.includes('✅') ? ' success' : nfcStatus.includes('❌') ? ' error' : ' info'}`}>
+                {nfcStatus}
+              </div>
+            )}
           </div>
           <div className="field-row">
             <div className="field-group">
