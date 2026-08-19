@@ -459,70 +459,6 @@ body {
 
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
-.field-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.btn-nfc {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 38px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(79, 172, 254, 0.2);
-  color: #4facfe;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.btn-nfc:hover:not(:disabled) {
-  background: rgba(79, 172, 254, 0.3);
-  color: #fff;
-  transform: translateY(-50%) scale(1.02);
-}
-
-.btn-nfc:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-nfc.scanning {
-  background: rgba(255, 193, 7, 0.2);
-  color: #ffc107;
-  animation: pulse 1s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.nfc-status {
-  font-size: 0.8rem;
-  margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.2);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.nfc-status.success { color: var(--success); }
-.nfc-status.error { color: var(--danger); }
-.nfc-status.info { color: #4facfe; }
-
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; }
 
 .btn-secondary {
@@ -546,6 +482,103 @@ body {
   background: rgba(255,255,255,0.02);
 }
 
+/* ── Import/Export ── */
+.file-input-hidden { display: none; }
+
+.import-export-modal {
+  padding: 32px;
+  width: 100%; max-width: 480px;
+}
+
+.ie-section {
+  margin-bottom: 24px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+}
+
+.ie-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ie-section-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+.btn-ie {
+  width: 100%;
+  padding: 14px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.btn-ie:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.btn-ie.primary {
+  background: rgba(79, 172, 254, 0.2);
+  border-color: rgba(79, 172, 254, 0.3);
+  color: #4facfe;
+}
+
+.btn-ie.primary:hover {
+  background: rgba(79, 172, 254, 0.3);
+  color: #fff;
+}
+
+.ie-options {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.ie-option {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.ie-option:hover, .ie-option.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.ie-stats {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+  text-align: center;
+}
+
 /* ── Toast ── */
 .toast-container { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column; gap: 12px; }
 .toast {
@@ -562,96 +595,6 @@ body {
 // ── Helpers ───────────────────────────────────────────────
 function formatCardNumber(raw) {
   return raw.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim()
-}
-
-// ── NFC Scanning Function ─────────────────────────────────
-async function scanWithNFC(onProgress) {
-  if (!('NDEFReader' in window)) {
-    throw new Error('NFC not supported on this device. Please use an Android phone with Chrome/Edge.')
-  }
-
-  const reader = new NDEFReader()
-  
-  return new Promise((resolve, reject) => {
-    let resolved = false
-    
-    reader.onreading = event => {
-      if (resolved) return
-      
-      try {
-        let cardNumber = null
-        
-        for (const record of event.message.records) {
-          const textDecoder = new TextDecoder(record.encoding)
-          
-          // Try to extract card number from text records
-          if (record.recordType === 'text') {
-            const text = textDecoder.decode(record.data)
-            const extracted = text.replace(/\D/g, '').slice(0, 16)
-            if (extracted.length >= 13) {
-              cardNumber = extracted
-              break
-            }
-          }
-          
-          // Try URI records
-          if (record.recordType === 'url') {
-            const url = textDecoder.decode(record.data)
-            const extracted = url.replace(/\D/g, '').slice(0, 16)
-            if (extracted.length >= 13) {
-              cardNumber = extracted
-              break
-            }
-          }
-          
-          // Try well-known text records
-          if (record.recordType === 0x54) { // 'T' for text
-            const text = textDecoder.decode(record.data)
-            const extracted = text.replace(/\D/g, '').slice(0, 16)
-            if (extracted.length >= 13) {
-              cardNumber = extracted
-              break
-            }
-          }
-        }
-        
-        if (cardNumber) {
-          resolved = true
-          resolve(formatCardNumber(cardNumber))
-        } else {
-          reject(new Error('No valid card number found on NFC tag'))
-        }
-      } catch (err) {
-        reject(new Error('Failed to parse NFC data: ' + err.message))
-      }
-    }
-    
-    reader.onreadingerror = () => {
-      if (!resolved) {
-        resolved = true
-        reject(new Error('Failed to read NFC tag. Please try again.'))
-      }
-    }
-    
-    reader.scan()
-      .then(() => {
-        if (onProgress) onProgress('Scan started. Hold your card near the back of your phone...')
-      })
-      .catch(err => {
-        if (!resolved) {
-          resolved = true
-          reject(new Error('NFC scan failed: ' + err.message))
-        }
-      })
-    
-    // Timeout after 15 seconds
-    setTimeout(() => {
-      if (!resolved) {
-        resolved = true
-        reject(new Error('NFC scan timed out. Please try again.'))
-      }
-    }, 15000)
-  })
 }
 
 function CopyBtn({ number, dashes }) {
@@ -744,11 +687,9 @@ function Card({ card, index, onEdit, onDelete }) {
 }
 
 // ── Add/Edit Modal ────────────────────────────────────────
-function Modal({ initial, onSave, onClose, onNFCScanRequest }) {
+function Modal({ initial, onSave, onClose }) {
   const [form, setForm] = useState(initial || { name: '', number: '', expiry: '', cvv: '' })
   const [errors, setErrors] = useState({})
-  const [nfcScanning, setNfcScanning] = useState(false)
-  const [nfcStatus, setNfcStatus] = useState('')
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   function handleNumber(e) { set('number', formatCardNumber(e.target.value)) }
@@ -758,28 +699,6 @@ function Modal({ initial, onSave, onClose, onNFCScanRequest }) {
     set('expiry', v)
   }
   function handleCvv(e) { set('cvv', e.target.value.replace(/\D/g, '').slice(0, 4)) }
-
-  async function handleNFCScan() {
-    setNfcScanning(true)
-    setNfcStatus('Starting NFC scan...')
-    
-    try {
-      const cardNumber = await scanWithNFC((status) => setNfcStatus(status))
-      set('number', cardNumber)
-      setNfcStatus('✅ Card scanned successfully!')
-      setTimeout(() => {
-        setNfcScanning(false)
-        setNfcStatus('')
-      }, 2000)
-    } catch (err) {
-      setNfcScanning(false)
-      setNfcStatus('❌ ' + err.message)
-      if (onNFCScanRequest) {
-        onNFCScanRequest(err.message)
-      }
-      setTimeout(() => setNfcStatus(''), 5000)
-    }
-  }
 
   function validate() {
     const newErrors = {}
@@ -805,40 +724,13 @@ function Modal({ initial, onSave, onClose, onNFCScanRequest }) {
           </div>
           <div className="field-group">
             <label className="field-label">Card Number</label>
-            <div className="field-input-wrapper">
-              <input 
-                className={`field-input${errors.number ? ' error' : ''}`} 
-                placeholder="0000 0000 0000 0000" 
-                value={form.number} 
-                onChange={handleNumber} 
-                required 
-                style={{ paddingRight: nfcScanning ? '140px' : '100px' }}
-              />
-              <button 
-                type="button"
-                className={`btn-nfc${nfcScanning ? ' scanning' : ''}`} 
-                onClick={handleNFCScan}
-                disabled={nfcScanning}
-                title="Scan card using NFC"
-              >
-                {nfcScanning ? (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-                    Scanning...
-                  </>
-                ) : (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
-                    Scan NFC
-                  </>
-                )}
-              </button>
-            </div>
-            {nfcStatus && (
-              <div className={`nfc-status${nfcStatus.includes('✅') ? ' success' : nfcStatus.includes('❌') ? ' error' : ' info'}`}>
-                {nfcStatus}
-              </div>
-            )}
+            <input 
+              className={`field-input${errors.number ? ' error' : ''}`} 
+              placeholder="0000 0000 0000 0000" 
+              value={form.number} 
+              onChange={handleNumber} 
+              required 
+            />
           </div>
           <div className="field-row">
             <div className="field-group">
@@ -855,6 +747,152 @@ function Modal({ initial, onSave, onClose, onNFCScanRequest }) {
             <button type="submit" className="btn-primary">Save Card</button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Import/Export Modal ───────────────────────────────────
+function ImportExportModal({ cards, onImport, onClose }) {
+  const [importMode, setImportMode] = useState('merge') // 'merge' or 'replace'
+  const fileInputRef = useRef(null)
+
+  function handleExport() {
+    // Create export data with metadata
+    const exportData = {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      cardCount: cards.length,
+      cards: cards.map(c => ({
+        name: c.name || '',
+        number: c.number?.replace(/\s/g, '') || '',
+        expiry: c.expiry || '',
+        cvv: c.cvv || ''
+      }))
+    }
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `card-vault-backup-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  function handleFileSelect(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result)
+        
+        // Validate structure
+        if (!data.cards || !Array.isArray(data.cards)) {
+          throw new Error('Invalid file format: missing cards array')
+        }
+
+        // Validate each card has required fields
+        const validCards = data.cards.filter(c => 
+          c && typeof c === 'object' && 
+          typeof c.number === 'string' && 
+          c.number.replace(/\D/g, '').length >= 13
+        )
+
+        if (validCards.length === 0) {
+          throw new Error('No valid cards found in file')
+        }
+
+        // Format cards for import
+        const importedCards = validCards.map(c => ({
+          id: Date.now() + Math.random(),
+          name: c.name || '',
+          number: c.number.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim(),
+          expiry: c.expiry || '',
+          cvv: c.cvv || ''
+        }))
+
+        onImport(importedCards, importMode)
+        onClose()
+      } catch (err) {
+        alert('Import failed: ' + err.message)
+      }
+    }
+    reader.readAsText(file)
+    
+    // Reset file input
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="import-export-modal glass-panel">
+        <div className="modal-title">Import / Export</div>
+        
+        {/* Export Section */}
+        <div className="ie-section">
+          <div className="ie-section-title">
+            <span>📤</span> Export Cards
+          </div>
+          <div className="ie-section-desc">
+            Download your cards as a JSON backup file. Use this to transfer your vault to another device.
+          </div>
+          <button className="btn-ie primary" onClick={handleExport} disabled={cards.length === 0}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export {cards.length} Card{cards.length !== 1 ? 's' : ''}
+          </button>
+          {cards.length === 0 && <div className="ie-stats">No cards to export</div>}
+        </div>
+
+        {/* Import Section */}
+        <div className="ie-section">
+          <div className="ie-section-title">
+            <span>📥</span> Import Cards
+          </div>
+          <div className="ie-section-desc">
+            Load cards from a previously exported JSON file. Choose how to handle existing cards.
+          </div>
+          
+          <div className="ie-options">
+            <button 
+              className={`ie-option ${importMode === 'merge' ? 'active' : ''}`} 
+              onClick={() => setImportMode('merge')}
+            >
+              Merge (Add to existing)
+            </button>
+            <button 
+              className={`ie-option ${importMode === 'replace' ? 'active' : ''}`} 
+              onClick={() => setImportMode('replace')}
+            >
+              Replace (Overwrite all)
+            </button>
+          </div>
+
+          <input 
+            ref={fileInputRef}
+            type="file" 
+            accept=".json" 
+            className="file-input-hidden" 
+            onChange={handleFileSelect}
+            id="import-file-input"
+          />
+          <button 
+            className="btn-ie" 
+            onClick={() => fileInputRef.current?.click()}
+            style={{ marginTop: '12px' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Select JSON File
+          </button>
+        </div>
+
+        <div className="modal-actions">
+          <button className="btn-secondary" onClick={onClose}>Close</button>
+        </div>
       </div>
     </div>
   )
@@ -922,6 +960,7 @@ export default function App() {
   const [cards, setCards] = useState([])
   const [modal, setModal] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showImportExport, setShowImportExport] = useState(false)
   const [toasts, setToasts] = useState([])
   const settingsRef = useRef(null)
 
@@ -959,6 +998,17 @@ export default function App() {
   function clearAll() {
     if (!confirm('Permanently delete your vault? This cannot be undone.')) return setShowSettings(false)
     localStorage.clear(); setCards([]); setCryptoKey(null); setShowSettings(false)
+  }
+
+  function handleImport(importedCards, mode) {
+    if (mode === 'replace') {
+      updateCards(() => importedCards)
+      addToast(`Replaced with ${importedCards.length} card${importedCards.length !== 1 ? 's' : ''}`, 'success')
+    } else {
+      // Merge mode - add all imported cards
+      updateCards(prev => [...prev, ...importedCards])
+      addToast(`Imported ${importedCards.length} card${importedCards.length !== 1 ? 's' : ''}`, 'success')
+    }
   }
 
   const sorted = [...cards].sort((a, b) => ((a.name || '').trim().toUpperCase() || '~').localeCompare((b.name || '').trim().toUpperCase() || '~'))
@@ -1000,6 +1050,7 @@ export default function App() {
               <button className="btn-settings" onClick={() => setShowSettings(s => !s)}>⚙️</button>
               {showSettings && (
                 <div className="settings-menu glass-panel">
+                  <button className="settings-item" onClick={() => { setShowImportExport(true); setShowSettings(false) }}>📦 Import / Export</button>
                   <button className="settings-item" onClick={() => { setCryptoKey(null); setShowSettings(false) }}>🔒 Lock Vault</button>
                   <button className="settings-item danger" onClick={clearAll}>🗑 Wipe Database</button>
                 </div>
@@ -1028,6 +1079,7 @@ export default function App() {
         </div>
 
         {modal && <Modal initial={modal === 'add' ? null : modal} onSave={modal === 'add' ? addCard : editCard} onClose={() => setModal(null)} />}
+        {showImportExport && <ImportExportModal cards={cards} onImport={handleImport} onClose={() => setShowImportExport(false)} />}
         <div className="toast-container">
           {toasts.map(t => <Toast key={t.id} message={t.message} type={t.type} onClose={() => setToasts(p => p.filter(x => x.id !== t.id))} />)}
         </div>
